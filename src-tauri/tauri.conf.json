@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SeeBrowser",
+  "version": "1.0.0",
+  "identifier": "org.seebrowser.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "SeeBrowser",
+        "width": 1320,
+        "height": 850,
+        "minWidth": 820,
+        "minHeight": 520,
+        "center": true,
+        "resizable": true,
+        "decorations": false,
+        "transparent": false
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "copyright": "© 2026 SeeBrowser contributors (MIT)",
+    "shortDescription": "SeeBrowser — fast, customizable open-source web browser built with Rust.",
+    "longDescription": "SeeBrowser is an open-source desktop web browser written in Rust with Tauri. It features a pluggable rendering-engine architecture (the open-source Servo engine via libservo, plus the system Chromium/WebKit WebView), dark mode everywhere, Google & Brave search, tabs, bookmarks, history, downloads, an ad/tracker blocker, and deep appearance customization.",
+    "publisher": "SeeBrowser",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "installMode": "perMachine", "displayLanguageSelector": false }
+    },
+    "macOS": { "minimumSystemVersion": "10.15" },
+    "linux": {
+      "deb": { "section": "web" },
+      "appimage": { "bundleMediaFramework": false }
+    }
+  }
+}
