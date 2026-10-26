@@ -32,12 +32,16 @@ const tabsEl = $("#tabs"), anchorEl = $("#webview-anchor"), internalEl = $("#int
 const omni = $("#omni-input") as HTMLInputElement;
 const omniIcon = $("#omni-icon"), omniBox = $("#omnibox"), omniEngine = $("#omni-engine");
 const suggestEl = $("#omni-suggest"), menuEl = $("#main-menu"), tabMenuEl = $("#tab-menu");
+const tabSearchEl = $("#tab-search"), siteInfoEl = $("#site-info"), ghostEl = $("#page-ghost");
 
 let tabs: Tab[] = [];
 let activeId = "";
 let closedStack: { url: string; pinned: boolean; isPrivate: boolean }[] = [];
 let editingOmni = false;
 let suggestIndex = -1;
+let unseenDownloads = 0;
+let clockTimer = 0;
+let cachedEngine = "";
 const ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
 const active = () => tabs.find((t) => t.id === activeId);
@@ -71,21 +75,37 @@ function syncBounds() {
 
 /* --------------------------- overlays --------------------------- */
 function overlayOpen() {
-  return !suggestEl.classList.contains("hidden") || !menuEl.classList.contains("hidden") || !tabMenuEl.classList.contains("hidden");
+  return [suggestEl, menuEl, tabMenuEl, tabSearchEl, siteInfoEl].some((el) => !el.classList.contains("hidden"));
 }
 function syncWebviewVisibility() {
   const a = active();
+  const over = overlayOpen();
   for (const tab of tabs) {
     if (tab.kind !== "web" || !tab.created) continue;
-    const vis = tab.id === a?.id && !overlayOpen();
-    host.setVisible(tab.id, vis).catch(() => {});
+    host.setVisible(tab.id, tab.id === a?.id && !over).catch(() => {});
+  }
+  // While a menu covers the (hidden) native page view, show a calm
+  // placeholder instead of a blank void (Chrome-like: page still "there").
+  const showGhost = !!a && a.kind === "web" && over;
+  ghostEl.classList.toggle("hidden", !showGhost);
+  if (showGhost && a) {
+    $("#ghost-title").textContent = a.title;
+    $("#ghost-url").textContent = a.url;
   }
 }
 function hidePopups() {
-  suggestEl.classList.add("hidden");
-  menuEl.classList.add("hidden");
-  tabMenuEl.classList.add("hidden");
+  for (const el of [suggestEl, menuEl, tabMenuEl, tabSearchEl, siteInfoEl]) el.classList.add("hidden");
   syncWebviewVisibility();
+}
+function markDownloadsSeen() {
+  unseenDownloads = 0;
+  $("#dl-badge").classList.add("hidden");
+}
+function bumpDownloadsBadge() {
+  unseenDownloads++;
+  const b = $("#dl-badge");
+  b.textContent = String(unseenDownloads);
+  b.classList.remove("hidden");
 }
 
 /* ------------------------------ tabs ------------------------------ */
@@ -135,8 +155,13 @@ function openTab(rawUrl = "see://newtab", opts: { activate?: boolean; pinned?: b
     zoom: store.settings.defaultZoom,
     blocked: 0,
   };
-  tabs.push(tab);
-  sortPinned();
+  // Chrome: a new tab opens right after the current one (pinned tabs stay first).
+  const cur = active();
+  let at = tabs.length;
+  if (tab.pinned) at = tabs.filter((x) => x.pinned).length;
+  else if (cur && !cur.pinned) at = tabs.indexOf(cur) + 1;
+  else if (cur && cur.pinned) at = tabs.filter((x) => x.pinned).length;
+  tabs.splice(at, 0, tab);
   if (opts.activate !== false) activateTab(tab.id);
   else { renderTabs(); ensureWebview(tab); }
   saveSession();
@@ -235,11 +260,17 @@ function renderTabs() {
       ? `<svg class="ic sm tab-fav-svg"><use href="#i-eye"/></svg>`
       : tab.loading
         ? `<span class="spinner"></span>`
-        : `<img class="tab-fav" src="${faviconFor(tab.url)}" alt="" onerror="this.style.display='none'">`;
+        : `<img class="tab-fav" src="${faviconFor(tab.url)}" alt="">`;
     el.innerHTML = `
       ${tab.isPrivate ? `<svg class="ic sm priv-ic"><use href="#i-incog"/></svg>` : fav}
       <span class="tab-title">${esc(tab.title)}</span>
       ${tab.pinned ? "" : `<button class="tab-close" title="${t("closeTab")}"><svg class="ic xs"><use href="#i-x"/></svg></button>`}`;
+    const img = el.querySelector<HTMLImageElement>(".tab-fav");
+    if (img) img.addEventListener("error", () => {
+      const s = document.createElement("span");
+      s.innerHTML = `<svg class="ic sm"><use href="#i-globe"/></svg>`;
+      img.replaceWith(s);
+    }, { once: true });
     el.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest(".tab-close")) closeTab(tab.id);
       else activateTab(tab.id);
@@ -278,6 +309,10 @@ function updateToolbar() {
     ? `<svg class="ic sm"><use href="#i-eye"/></svg>`
     : secure ? `<svg class="ic sm ok"><use href="#i-lock"/></svg>` : `<svg class="ic sm"><use href="#i-globe"/></svg>`;
   omniEngine.textContent = SEARCH_ENGINES[store.settings.searchEngine].name;
+  const zc = $("#omni-zoom");
+  const showZoom = tab.kind === "web" && Math.abs(tab.zoom - 1) > 0.001;
+  zc.classList.toggle("hidden", !showZoom);
+  if (showZoom) zc.textContent = `${Math.round(tab.zoom * 100)}%`;
   const bm = tab.kind === "web" && store.isBookmarked(tab.url);
   $("#btn-star").innerHTML = `<svg class="ic sm"><use href="#i-star${bm ? "-f" : ""}"/></svg>`;
   $("#btn-star").classList.toggle("on", bm);
@@ -305,12 +340,14 @@ function renderBookmarksBar() {
 
 /* ------------------------- host (Rust) events ------------------------- */
 function onTabEvent(e: TabEvent) {
+  // Native menu accelerators (they work even when the page has focus).
+  if (e.type === "shortcut") { handleShortcut(e.label); return; }
   const id = e.label.replace(/^tab-/, "");
   const tab = tabs.find((x) => x.id === id);
   if (e.type === "new-tab" && e.url) { openTab(e.url); return; }
   if (e.type === "download-start" && e.url) {
     store.downloads.unshift({ id: newId(), url: e.url, path: e.path ?? "", time: Date.now(), success: null });
-    store.save(); toast(`⬇ ${hostnameOf(e.url)}`);
+    store.save(); toast(`⬇ ${hostnameOf(e.url)}`); bumpDownloadsBadge();
     if (active()?.page === "downloads") renderInternal(active()!);
     return;
   }
@@ -342,12 +379,21 @@ function onTabEvent(e: TabEvent) {
 }
 
 /* --------------------------- omnibox --------------------------- */
-function currentSuggestions(q: string): { label: string; sub: string; url: string; icon: string }[] {
-  const out: { label: string; sub: string; url: string; icon: string }[] = [];
+interface Suggestion { label: string; sub: string; url: string; icon: string; tabId?: string }
+function currentSuggestions(q: string): Suggestion[] {
+  const out: Suggestion[] = [];
   const query = q.trim();
   if (!query) return out;
   out.push({ label: query, sub: `${t("searchWith")} ${SEARCH_ENGINES[store.settings.searchEngine].name}`, url: query, icon: "i-search" });
   const low = query.toLowerCase();
+  // Chrome-style "Switch to this tab" for pages that are already open.
+  for (const tb of tabs) {
+    if (tb.id === activeId) continue;
+    if ((tb.title + " " + tb.url).toLowerCase().includes(low)) {
+      out.splice(1, 0, { label: tb.title, sub: t("switchToTab"), url: tb.url, icon: "i-eye", tabId: tb.id });
+      break;
+    }
+  }
   const seen = new Set<string>();
   for (const b of store.bookmarks) {
     if ((b.title + b.url).toLowerCase().includes(low) && !seen.has(b.url)) {
@@ -371,34 +417,49 @@ function showSuggestions() {
   suggestEl.style.top = `${r.bottom + 6}px`;
   suggestEl.style.width = `${r.width}px`;
   suggestEl.innerHTML = items.map((s, i) =>
-    `<div class="suggest-item${i === suggestIndex ? " sel" : ""}" data-url="${esc(s.url)}">
+    `<div class="suggest-item${i === suggestIndex ? " sel" : ""}" data-i="${i}">
        <svg class="ic sm"><use href="#${s.icon}"/></svg>
-       <span class="s-label">${esc(s.label)}</span><span class="s-sub">${esc(s.sub)}</span>
+       <span class="s-label">${esc(s.label)}</span><span class="s-sub${s.tabId ? " switch" : ""}">${esc(s.sub)}</span>
      </div>`).join("");
   suggestEl.classList.remove("hidden");
   suggestEl.querySelectorAll<HTMLElement>(".suggest-item").forEach((el) =>
-    el.addEventListener("mousedown", (ev) => { ev.preventDefault(); goOmni(el.dataset.url!); }));
+    el.addEventListener("mousedown", (ev) => { ev.preventDefault(); pickSuggestion(items[Number(el.dataset.i)]); }));
   syncWebviewVisibility();
 }
 
-function goOmni(value: string) {
-  const tab = active(); if (!tab) return;
+function goOmni(value: string, inNewTab = false) {
   hidePopups(); editingOmni = false; omni.blur();
+  if (inNewTab) { openTab(value); return; }
+  const tab = active(); if (!tab) return;
   navigate(tab, value);
 }
+function pickSuggestion(s: Suggestion | undefined) {
+  if (!s) return;
+  if (s.tabId) { hidePopups(); editingOmni = false; omni.blur(); activateTab(s.tabId); }
+  else goOmni(s.url);
+}
 
-omni.addEventListener("focus", () => { editingOmni = true; omni.select(); showSuggestions(); });
-omni.addEventListener("input", () => { suggestIndex = -1; showSuggestions(); });
+// Chrome behavior: the first click into the omnibox selects the whole URL,
+// a second click places the caret.
+let omniFreshFocus = false;
+omni.addEventListener("focus", () => { editingOmni = true; omniFreshFocus = true; omni.select(); showSuggestions(); });
+omni.addEventListener("mouseup", (e) => {
+  if (omniFreshFocus) { e.preventDefault(); omni.select(); omniFreshFocus = false; }
+});
+omni.addEventListener("input", () => { suggestIndex = -1; omniFreshFocus = false; showSuggestions(); });
 omni.addEventListener("blur", () => window.setTimeout(() => { editingOmni = false; suggestEl.classList.add("hidden"); updateToolbar(); syncWebviewVisibility(); }, 120));
 omni.addEventListener("keydown", (e) => {
   const items = currentSuggestions(omni.value);
   if (e.key === "Enter") {
-    const pick = suggestIndex >= 0 ? items[suggestIndex]?.url : omni.value;
-    if (pick) goOmni(pick);
+    const sel = suggestIndex >= 0 ? items[suggestIndex] : undefined;
+    if (e.altKey) { goOmni(sel?.url ?? omni.value, true); return; } // Alt+Enter: new tab
+    if (sel) pickSuggestion(sel);
+    else goOmni(omni.value);
   } else if (e.key === "ArrowDown") { e.preventDefault(); suggestIndex = Math.min(items.length - 1, suggestIndex + 1); showSuggestions(); }
   else if (e.key === "ArrowUp") { e.preventDefault(); suggestIndex = Math.max(-1, suggestIndex - 1); showSuggestions(); }
   else if (e.key === "Escape") { omni.value = active()?.url ?? ""; omni.blur(); }
 });
+$("#omni-zoom").addEventListener("click", () => zoomStep(0));
 
 /* ------------------------------ menus ------------------------------ */
 interface MenuItem { label?: string; icon?: string; shortcut?: string; action?: () => void; sep?: boolean; checked?: boolean }
@@ -442,6 +503,94 @@ function zoomStep(dir: 1 | -1 | 0) {
   host.setZoom(tab.id, tab.zoom).catch(() => {});
   toast(`${Math.round(tab.zoom * 100)}%`);
 }
+
+/* ------------------------- site info popup ------------------------- */
+function showSiteInfo() {
+  const tab = active(); if (!tab) return;
+  if (!siteInfoEl.classList.contains("hidden")) { hidePopups(); return; }
+  hidePopups();
+  const secure = tab.url.startsWith("https://");
+  const title = tab.kind === "internal" ? t("internalInfo") : hostnameOf(tab.url);
+  const conn = tab.kind === "internal" ? "" : secure
+    ? `<div class="si-line"><svg class="ic sm ok"><use href="#i-lock"/></svg> ${t("secureConn")}</div>`
+    : `<div class="si-line"><svg class="ic sm bad"><use href="#i-globe"/></svg> ${t("notSecureConn")}</div>`;
+  siteInfoEl.innerHTML = `
+    <div class="si-head"><svg class="ic"><use href="#i-${tab.kind === "internal" ? "eye" : secure ? "lock" : "globe"}"/></svg><span class="si-host">${esc(title)}</span></div>
+    ${conn}
+    ${tab.kind === "web" && store.settings.adBlock ? `<div class="si-line"><svg class="ic sm"><use href="#i-shield"/></svg> ${tab.blocked} ${t("blockedCount")}</div>` : ""}
+    ${tab.kind === "web" && Math.abs(tab.zoom - 1) > 0.001 ? `<div class="si-line">🔍 ${Math.round(tab.zoom * 100)}%</div>` : ""}
+    ${cachedEngine ? `<div class="si-line"><svg class="ic sm"><use href="#i-code"/></svg> <span dir="ltr">${esc(cachedEngine)}</span></div>` : ""}
+    <div class="si-actions">
+      <button class="btn sm" id="si-copy">${t("copyUrl")}</button>
+      ${tab.kind === "web" ? `<button class="btn sm" id="si-ext">${t("openExternal")}</button>` : ""}
+    </div>`;
+  const r = omniBox.getBoundingClientRect();
+  siteInfoEl.classList.remove("hidden");
+  const rtl = document.documentElement.dir === "rtl";
+  siteInfoEl.style.left = `${Math.max(6, rtl ? r.right - siteInfoEl.offsetWidth : r.left)}px`;
+  siteInfoEl.style.top = `${r.bottom + 6}px`;
+  siteInfoEl.querySelector("#si-copy")?.addEventListener("click", () => {
+    navigator.clipboard?.writeText(tab.url); hidePopups(); toast(t("copiedUrl"));
+  });
+  siteInfoEl.querySelector("#si-ext")?.addEventListener("click", () => {
+    host.openExternal(tab.url).catch(() => {}); hidePopups();
+  });
+  syncWebviewVisibility();
+}
+omniIcon.addEventListener("click", showSiteInfo);
+
+/* --------------------------- tab search --------------------------- */
+function renderTabSearch(filter: string) {
+  const list = $("#tab-search-list");
+  const q = filter.trim().toLowerCase();
+  const match = (title: string, url: string) => !q || (title + " " + url).toLowerCase().includes(q);
+  const openItems = tabs.filter((tb) => match(tb.title, tb.url)).map((tb) => `
+    <button class="ts-item" data-act="${tb.id}">
+      ${tb.kind === "internal" ? `<svg class="ic sm"><use href="#i-eye"/></svg>` : `<img src="${faviconFor(tb.url)}" alt="" onerror="this.style.display='none'">`}
+      <span class="ts-t">${esc(tb.title)}</span><span class="ts-h2">${esc(hostnameOf(tb.url))}</span>
+      <span class="ts-x" data-close="${tb.id}" title="${t("closeTab")}"><svg class="ic xs"><use href="#i-x"/></svg></span>
+    </button>`).join("");
+  const closedItems = [...closedStack].reverse().slice(0, 8)
+    .filter((c) => match(prettyTitle(c.url), c.url)).map((c) => `
+    <button class="ts-item" data-reopen="${esc(c.url)}">
+      <svg class="ic sm"><use href="#i-history"/></svg>
+      <span class="ts-t">${esc(prettyTitle(c.url))}</span><span class="ts-h2">${esc(hostnameOf(c.url))}</span>
+    </button>`).join("");
+  list.innerHTML =
+    (openItems ? `<div class="ts-h">${t("openTabs")} · ${tabs.length}</div>` + openItems : "") +
+    (closedItems ? `<div class="ts-h">${t("recentlyClosed")}</div>` + closedItems : "");
+  list.querySelectorAll<HTMLElement>("[data-act]").forEach((el) =>
+    el.addEventListener("click", (e) => {
+      const x = (e.target as HTMLElement).closest("[data-close]") as HTMLElement | null;
+      if (x) { e.stopPropagation(); closeTab(x.dataset.close!); renderTabSearch(filter); return; }
+      hidePopups(); activateTab(el.dataset.act!);
+    }));
+  list.querySelectorAll<HTMLElement>("[data-reopen]").forEach((el) =>
+    el.addEventListener("click", () => { hidePopups(); openTab(el.dataset.reopen!); }));
+}
+function toggleTabSearch() {
+  if (!tabSearchEl.classList.contains("hidden")) { hidePopups(); return; }
+  hidePopups();
+  const input = $("#tab-search-input") as HTMLInputElement;
+  input.value = "";
+  renderTabSearch("");
+  const r = $("#btn-tabsearch").getBoundingClientRect();
+  const rtl = document.documentElement.dir === "rtl";
+  tabSearchEl.classList.remove("hidden");
+  tabSearchEl.style.left = `${Math.max(6, rtl ? r.right - tabSearchEl.offsetWidth : r.left)}px`;
+  tabSearchEl.style.top = `${r.bottom + 6}px`;
+  syncWebviewVisibility();
+  input.focus();
+}
+$("#btn-tabsearch").addEventListener("click", toggleTabSearch);
+($("#tab-search-input") as HTMLInputElement).addEventListener("input", (e) => renderTabSearch((e.target as HTMLInputElement).value));
+($("#tab-search-input") as HTMLInputElement).addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const first = tabSearchEl.querySelector<HTMLElement>("[data-act],[data-reopen]");
+    first?.click();
+  }
+  if (e.key === "Escape") hidePopups();
+});
 
 $("#btn-menu").addEventListener("click", (e) => {
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -531,11 +680,15 @@ function renderNewtab(tab: Tab) {
     </div>
     <h2 class="nt-h">${t("speedDial")}</h2>
     <div class="nt-grid">
-      ${s.speedDial.map((d) => `
+      ${s.speedDial.map((d, i) => `
         <button class="nt-tile" data-url="${esc(d.url)}">
+          <span class="nt-del" data-del="${i}" title="${t("removeShortcut")}"><svg class="ic xs"><use href="#i-x"/></svg></span>
           <img src="${faviconFor(d.url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'nt-letter',textContent:'${esc(d.title[0] ?? "?")}'}))">
           <span>${esc(d.title)}</span>
         </button>`).join("")}
+      <button class="nt-tile nt-add" id="nt-add">
+        <svg class="ic"><use href="#i-plus"/></svg><span>${t("addShortcut")}</span>
+      </button>
     </div>
     ${most.length ? `<h2 class="nt-h">${t("mostVisited")}</h2>
     <div class="nt-most">${most.map((m) => `
@@ -543,7 +696,7 @@ function renderNewtab(tab: Tab) {
     </div>` : ""}
   </div>`;
   const clock = () => { const c = document.getElementById("nt-clock"); if (c) c.textContent = new Date().toLocaleTimeString(i18n.lang === "fa" ? "fa-IR" : "en-US", { hour: "2-digit", minute: "2-digit" }); };
-  clock(); window.setInterval(clock, 15000);
+  clock(); clockTimer = window.setInterval(clock, 15000);
   $("#nt-search").addEventListener("submit", (e) => {
     e.preventDefault();
     const v = ($("#nt-input") as HTMLInputElement).value;
@@ -551,10 +704,26 @@ function renderNewtab(tab: Tab) {
   });
   internalEl.querySelectorAll<HTMLElement>("[data-url]").forEach((el) =>
     el.addEventListener("click", (e) => {
+      const del = (e.target as HTMLElement).closest("[data-del]") as HTMLElement | null;
+      if (del) {
+        e.stopPropagation();
+        store.settings.speedDial.splice(Number(del.dataset.del), 1);
+        store.save(true); renderNewtab(tab);
+        return;
+      }
       const url = el.dataset.url!;
       if ((e as MouseEvent).ctrlKey || (e as MouseEvent).metaKey) openTab(url, { activate: false });
       else navigate(tab, url);
     }));
+  $("#nt-add").addEventListener("click", () => {
+    const raw = window.prompt(t("enterUrlPrompt"), "https://");
+    if (!raw?.trim()) return;
+    const url = normalizeInput(raw, store.settings.searchEngine);
+    if (url.startsWith("see://")) return;
+    const title = window.prompt(t("enterTitlePrompt"), hostnameOf(url)) || hostnameOf(url);
+    store.settings.speedDial.push({ title, url });
+    store.save(true); renderNewtab(tab);
+  });
   ($("#nt-input") as HTMLInputElement).focus();
 }
 
@@ -638,7 +807,10 @@ async function renderSettings() {
   on("s-tabpos", "change", (el) => { s.tabPosition = el.value as Settings["tabPosition"]; upd(); });
   on("s-lang", "change", (el) => { s.language = el.value as Settings["language"]; upd(true); });
   on("s-engine", "change", (el) => { s.searchEngine = el.value as Settings["searchEngine"]; upd(); updateToolbar(); });
-  on("s-render", "change", (el) => { s.engine = el.value as Settings["engine"]; upd(); toast(t("applyNewTabs")); });
+  on("s-render", "change", (el) => {
+    s.engine = el.value as Settings["engine"]; upd();
+    toast(s.engine === "servo" ? `Servo · ${t("servoBadge")} — docs/SERVO.md` : t("applyNewTabs"));
+  });
   on("s-ua", "change", (el) => { s.userAgent = el.value as Settings["userAgent"]; upd(); toast(t("applyNewTabs")); });
   on("s-zoom", "change", (el) => { s.defaultZoom = parseFloat(el.value); upd(); });
   on("s-startup", "change", (el) => { s.startup = el.value as Settings["startup"]; upd(); });
@@ -792,10 +964,12 @@ async function renderAbout() {
 function renderShortcuts() {
   const rows: [string, string][] = [
     ["Ctrl+T", t("mNewTab")], ["Ctrl+W", t("closeTab")], ["Ctrl+Shift+T", t("closedTabReopened")],
-    ["Ctrl+Tab / Ctrl+Shift+Tab", "← →"], ["Ctrl+L / F6", "Omnibox"], ["Ctrl+R / F5", t("reload")],
+    ["Ctrl+Tab / Ctrl+Shift+Tab", "← →"], ["Ctrl+1 … Ctrl+9", "Tab #"], ["Ctrl+Shift+A", t("searchTabs")],
+    ["Ctrl+L / F6", "Omnibox"], ["Alt+Enter", t("openNewTab")], ["Ctrl+R / F5", t("reload")],
     ["Alt+← / Alt+→", `${t("back")} / ${t("forward")}`], ["Ctrl+F", t("mFind")], ["Ctrl+H", t("mHistory")],
     ["Ctrl+J", t("mDownloads")], ["Ctrl+D", t("bookmark")], ["Ctrl++ / Ctrl+- / Ctrl+0", t("mZoomIn")],
-    ["Ctrl+Shift+P", t("mNewPrivate")], ["Ctrl+P", t("mPrint")], ["F12", t("mDevtools")],
+    ["Ctrl+Shift+P", t("mNewPrivate")], ["Ctrl+P", t("mPrint")], ["F11", t("fullscreen")], ["F12", t("mDevtools")],
+    ["Esc", t("stop")],
   ];
   internalEl.innerHTML = `<div class="page"><h1 class="page-h">${t("shortcuts")}</h1>
     <div class="card">${rows.map(([k, v]) => `<div class="sc-row"><kbd dir="ltr">${k}</kbd><span>${v}</span></div>`).join("")}</div></div>`;
@@ -815,6 +989,7 @@ function applySettings(rerenderInternal: boolean) {
   document.body.classList.toggle("compact", s.density === "compact");
   document.body.classList.toggle("tabs-side", s.tabPosition === "side");
   $("#btn-theme").innerHTML = `<svg class="ic"><use href="#i-${effectiveTheme() === "dark" ? "sun" : "moon"}"/></svg>`;
+  for (const tb of tabs) if (tb.kind === "internal") tb.title = pageTitle(tb.page);
   renderTabs();
   renderBookmarksBar();
   updateToolbar();
@@ -841,7 +1016,7 @@ $("#btn-star").addEventListener("click", () => {
   toast(added ? t("addedBookmark") : t("removedBookmark"));
   renderBookmarksBar(); updateToolbar();
 });
-$("#btn-downloads").addEventListener("click", () => openTab("see://downloads"));
+$("#btn-downloads").addEventListener("click", () => { markDownloadsSeen(); openTab("see://downloads"); });
 $("#btn-theme").addEventListener("click", () => {
   store.settings.theme = effectiveTheme() === "dark" ? "light" : "dark";
   store.save(true); applySettings(false);
@@ -857,50 +1032,107 @@ $("#brand").addEventListener("click", () => openTab("see://about"));
 
 document.addEventListener("mousedown", (e) => {
   const el = e.target as HTMLElement;
-  if (!el.closest("#main-menu,#btn-menu,#tab-menu,#omni-suggest,#omnibox")) hidePopups();
+  if (!el.closest("#main-menu,#btn-menu,#tab-menu,#omni-suggest,#omnibox,#tab-search,#btn-tabsearch,#site-info")) hidePopups();
 });
 new ResizeObserver(syncBounds).observe(anchorEl);
 window.addEventListener("resize", syncBounds);
 tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
 
+/* ---- Unified shortcuts: DOM keydown + native menu accelerators (Rust)
+   feed the same handler; a timestamp guard prevents double-firing. ---- */
+let lastShortcutAt = 0;
+function handleShortcut(id: string) {
+  const now = Date.now();
+  if (now - lastShortcutAt < 120 && handleShortcut.last === id) return;
+  handleShortcut.last = id; lastShortcutAt = now;
+  const a = active();
+  const cycle = (d: number) => {
+    const i = tabs.findIndex((x) => x.id === activeId);
+    const n = tabs[(i + d + tabs.length) % tabs.length];
+    if (n) activateTab(n.id);
+  };
+  const tabNumber = (n: number) => {
+    const target = n === 9 ? tabs[tabs.length - 1] : tabs[n - 1];
+    if (target) activateTab(target.id);
+  };
+  switch (id) {
+    case "new-tab": openTab(); break;
+    case "close-tab": if (a) closeTab(a.id); break;
+    case "reopen-closed": {
+      const last = closedStack.pop();
+      if (last) { openTab(last.url, { pinned: last.pinned, isPrivate: last.isPrivate }); toast(t("closedTabReopened")); }
+      break;
+    }
+    case "private-tab": openTab("see://newtab", { isPrivate: true }); break;
+    case "search-tabs": toggleTabSearch(); break;
+    case "focus-omnibox": omni.focus(); omni.select(); break;
+    case "reload": if (a?.kind === "web") { a.loading = true; updateToolbar(); host.reload(a.id).catch(() => {}); } else if (a) renderInternal(a); break;
+    case "find": openFind(); break;
+    case "history": openTab("see://history"); break;
+    case "downloads": markDownloadsSeen(); openTab("see://downloads"); break;
+    case "bookmark": $("#btn-star").click(); break;
+    case "print": if (a) host.print(a.id).catch(() => {}); break;
+    case "zoom-in": zoomStep(1); break;
+    case "zoom-out": zoomStep(-1); break;
+    case "zoom-reset": zoomStep(0); break;
+    case "next-tab": cycle(1); break;
+    case "prev-tab": cycle(-1); break;
+    case "go-back": if (a) host.back(a.id).catch(() => {}); break;
+    case "go-forward": if (a) host.forward(a.id).catch(() => {}); break;
+    case "devtools": if (a) host.devtools(a.id).catch(() => {}); break;
+    case "fullscreen": host.windowAction("fullscreen").catch(() => {}); break;
+    case "tab-1": tabNumber(1); break;
+    case "tab-2": tabNumber(2); break;
+    case "tab-3": tabNumber(3); break;
+    case "tab-4": tabNumber(4); break;
+    case "tab-5": tabNumber(5); break;
+    case "tab-6": tabNumber(6); break;
+    case "tab-7": tabNumber(7); break;
+    case "tab-8": tabNumber(8); break;
+    case "tab-9": tabNumber(9); break;
+  }
+  updateToolbar();
+}
+handleShortcut.last = "";
+
 document.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
-  const a = active();
-  if (mod && e.key.toLowerCase() === "t" && !e.shiftKey) { e.preventDefault(); openTab(); }
-  else if (mod && e.key.toLowerCase() === "t" && e.shiftKey) {
-    e.preventDefault();
-    const last = closedStack.pop();
-    if (last) { openTab(last.url, { pinned: last.pinned, isPrivate: last.isPrivate }); toast(t("closedTabReopened")); }
+  const k = e.key.toLowerCase();
+  let id = "";
+  if (mod && e.key === "Tab") id = e.shiftKey ? "prev-tab" : "next-tab";
+  else if (mod && k === "t") id = e.shiftKey ? "reopen-closed" : "new-tab";
+  else if (mod && k === "w") id = "close-tab";
+  else if (mod && k === "a" && e.shiftKey) id = "search-tabs";
+  else if (mod && k === "l") id = "focus-omnibox";
+  else if (e.key === "F6") id = "focus-omnibox";
+  else if (mod && k === "r") id = "reload";
+  else if (e.key === "F5") id = "reload";
+  else if (mod && k === "f") id = "find";
+  else if (mod && k === "h") id = "history";
+  else if (mod && k === "j") id = "downloads";
+  else if (mod && k === "d") id = "bookmark";
+  else if (mod && k === "p") id = e.shiftKey ? "private-tab" : "print";
+  else if (mod && (e.key === "+" || e.key === "=")) id = "zoom-in";
+  else if (mod && e.key === "-") id = "zoom-out";
+  else if (mod && e.key === "0") id = "zoom-reset";
+  else if (mod && /^[1-9]$/.test(e.key)) id = `tab-${e.key}`;
+  else if (e.altKey && e.key === "ArrowLeft") id = "go-back";
+  else if (e.altKey && e.key === "ArrowRight") id = "go-forward";
+  else if (e.key === "F12") id = "devtools";
+  else if (e.key === "F11") id = "fullscreen";
+  else if (e.key === "Escape") {
+    if (overlayOpen()) hidePopups();
+    else if (!$("#find-bar").classList.contains("hidden")) closeFind();
+    else { const a = active(); if (a?.kind === "web" && a.loading) host.stop(a.id).catch(() => {}); }
+    return;
   }
-  else if (mod && e.key.toLowerCase() === "w") { e.preventDefault(); if (a) closeTab(a.id); }
-  else if (mod && (e.key.toLowerCase() === "l" || e.key === "F6")) { e.preventDefault(); omni.focus(); omni.select(); }
-  else if (e.key === "F6") { e.preventDefault(); omni.focus(); omni.select(); }
-  else if (mod && e.key.toLowerCase() === "r") { e.preventDefault(); if (a?.kind === "web") host.reload(a.id).catch(() => {}); }
-  else if (e.key === "F5") { if (a?.kind === "web") { e.preventDefault(); host.reload(a.id).catch(() => {}); } }
-  else if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); openFind(); }
-  else if (mod && e.key.toLowerCase() === "h") { e.preventDefault(); openTab("see://history"); }
-  else if (mod && e.key.toLowerCase() === "j") { e.preventDefault(); openTab("see://downloads"); }
-  else if (mod && e.key.toLowerCase() === "d") { e.preventDefault(); $("#btn-star").click(); }
-  else if (mod && e.key.toLowerCase() === "p" && !e.shiftKey) { e.preventDefault(); if (a) host.print(a.id).catch(() => {}); }
-  else if (mod && e.key.toLowerCase() === "p" && e.shiftKey) { e.preventDefault(); openTab("see://newtab", { isPrivate: true }); }
-  else if (mod && (e.key === "+" || e.key === "=")) { e.preventDefault(); zoomStep(1); }
-  else if (mod && e.key === "-") { e.preventDefault(); zoomStep(-1); }
-  else if (mod && e.key === "0") { e.preventDefault(); zoomStep(0); }
-  else if (mod && e.key === "Tab") {
-    e.preventDefault();
-    const i = tabs.findIndex((x) => x.id === activeId);
-    const n = tabs[(i + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length];
-    if (n) activateTab(n.id);
-  }
-  else if (e.altKey && e.key === "ArrowLeft") { if (a) host.back(a.id).catch(() => {}); }
-  else if (e.altKey && e.key === "ArrowRight") { if (a) host.forward(a.id).catch(() => {}); }
-  else if (e.key === "F12") { if (a) host.devtools(a.id).catch(() => {}); }
-  else if (e.key === "Escape") { hidePopups(); closeFind(); }
+  if (id) { e.preventDefault(); handleShortcut(id); }
 });
 
 /* ------------------------------- boot ------------------------------- */
 async function boot() {
   await host.init(onTabEvent).catch((e) => console.warn("host init", e));
+  host.engineInfo().then((i) => { cachedEngine = i.engine; }).catch(() => {});
   await store.load();
   if (host.kind !== "tauri") {
     $("#win-controls").style.display = "none";

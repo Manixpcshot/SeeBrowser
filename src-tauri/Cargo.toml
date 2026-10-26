@@ -1,6 +1,6 @@
 [package]
 name = "seebrowser"
-version = "1.0.0"
+version = "1.1.0"
 description = "SeeBrowser — a fast, customizable, open-source web browser built with Rust (Tauri), with a pluggable Servo / Chromium-WebView engine."
 authors = ["SeeBrowser contributors"]
 license = "MIT"
