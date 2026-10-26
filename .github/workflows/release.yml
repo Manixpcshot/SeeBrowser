@@ -1,0 +1,76 @@
+name: Release SeeBrowser
+
+# Pushing a version tag (e.g. v1.0.0) builds installers for all platforms
+# and publishes them as a GitHub Release:
+#   Windows: SeeBrowser_*_x64-setup.exe (NSIS) + .msi
+#   macOS:   .dmg
+#   Linux:   .AppImage + .deb
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build & publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: "SeeBrowser ${{ inputs.tag || github.ref_name }}"
+          releaseBody: |
+            ## SeeBrowser — مرورگر وب اوپن‌سورس با Rust
+
+            **دانلود:**
+            - 🪟 **Windows:** فایل `SeeBrowser_*_x64-setup.exe` را نصب کنید (یا `.msi`)
+            - 🍎 **macOS:** فایل `.dmg`
+            - 🐧 **Linux:** فایل `.AppImage` (همهٔ توزیع‌ها) یا `.deb`
+
+            **Download:**
+            - 🪟 **Windows:** install `SeeBrowser_*_x64-setup.exe` (or the `.msi`)
+            - 🍎 **macOS:** the `.dmg`
+            - 🐧 **Linux:** the `.AppImage` (any distro) or `.deb`
+
+            Built with Rust + Tauri. Rendering engines: Chromium/WebKit WebView (default) + Servo (libservo, experimental — see docs/SERVO.md).
+          releaseDraft: false
+          prerelease: false

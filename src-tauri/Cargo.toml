@@ -1,0 +1,35 @@
+[package]
+name = "seebrowser"
+version = "1.0.0"
+description = "SeeBrowser — a fast, customizable, open-source web browser built with Rust (Tauri), with a pluggable Servo / Chromium-WebView engine."
+authors = ["SeeBrowser contributors"]
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "seebrowser_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# "unstable" enables Tauri's multi-webview API (one native webview per tab).
+tauri = { version = "2", features = ["unstable", "devtools"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+open = "5"
+
+# --- Servo rendering engine (experimental, opt-in) ---------------------------
+# SeeBrowser's engine layer is pluggable (src/engine/). To build the Servo
+# backend you must first build Servo itself with its own toolchain (./mach)
+# because Servo pins a specific Rust nightly and large native dependencies.
+# Full step-by-step guide: ../docs/SERVO.md
+# Then uncomment the line below and build with `--features servo-engine`.
+# libservo = { git = "https://github.com/servo/servo", optional = true }
+
+[features]
+default = []
+# Enables the Servo (libservo) backend in src/engine/servo.rs.
+# Requires the libservo dependency above + a Servo build environment.
+servo-engine = []
