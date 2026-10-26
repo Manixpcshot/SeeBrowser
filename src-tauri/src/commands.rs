@@ -125,20 +125,21 @@ pub fn tab_create(
     let app_title = app.clone();
     let app_new = app.clone();
     let app_dl = app.clone();
+    let label_nav = label.clone();
 
     let mut builder = WebviewBuilder::new(&label, WebviewUrl::External(parsed))
         .devtools(true)
         .initialization_script(&script)
         // --- top-level navigation: ad-block + back/forward bookkeeping ---
-        .on_navigation(move |webview, url| {
-            let lbl = webview.label().to_string();
+        .on_navigation(move |url| {
+            let lbl = label_nav.as_str();
             if ad_block && url.host_str().map(engine::is_blocked_host).unwrap_or(false) {
-                emit(&app_nav, TabEvent::new(&lbl, "blocked").url(url.to_string()));
+                emit(&app_nav, TabEvent::new(lbl, "blocked").url(url.to_string()));
                 return false;
             }
             let mgr = app_nav.state::<TabManager>();
-            let (back, fwd) = mgr.record_nav(&lbl, &url.to_string());
-            let mut ev = TabEvent::new(&lbl, "navigate").url(url.to_string());
+            let (back, fwd) = mgr.record_nav(lbl, &url.to_string());
+            let mut ev = TabEvent::new(lbl, "navigate").url(url.to_string());
             ev.can_go_back = Some(back);
             ev.can_go_forward = Some(fwd);
             emit(&app_nav, ev);
