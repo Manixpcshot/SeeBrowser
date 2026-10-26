@@ -26,6 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+        with:
+          # Create the Pages site (build source: GitHub Actions) if it
+          # hasn't been enabled in the repo settings yet.
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website

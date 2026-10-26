@@ -6,7 +6,9 @@ name: Build SeeBrowser
 on:
   push:
     branches: [main, "arena/**"]
+    paths-ignore: ["website/**", "docs/**", "*.md", ".github/workflows/pages.yml"]
   pull_request:
+    paths-ignore: ["website/**", "docs/**", "*.md", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 jobs:
