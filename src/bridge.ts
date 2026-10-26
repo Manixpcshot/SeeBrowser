@@ -18,7 +18,7 @@ export interface TabOptions {
 export interface TabEvent {
   label: string;
   type: "navigate" | "title" | "loading" | "finished" | "new-tab"
-       | "download-start" | "download-done" | "blocked";
+       | "download-start" | "download-done" | "blocked" | "shortcut";
   url?: string;
   title?: string;
   canGoBack?: boolean;
@@ -56,7 +56,7 @@ export interface BrowserHost {
   writeStore(data: Record<string, unknown>): Promise<void>;
   openExternal(target: string): Promise<void>;
   engineInfo(): Promise<EngineInfo>;
-  windowAction(a: "minimize" | "maximize" | "close"): Promise<void>;
+  windowAction(a: "minimize" | "maximize" | "close" | "fullscreen"): Promise<void>;
 }
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -99,10 +99,11 @@ class TauriHost implements BrowserHost {
   writeStore(data: Record<string, unknown>) { return this.inv<void>("store_write", { data }); }
   openExternal(target: string) { return this.inv<void>("open_external", { target }); }
   engineInfo() { return this.inv<EngineInfo>("engine_info"); }
-  async windowAction(a: "minimize" | "maximize" | "close") {
+  async windowAction(a: "minimize" | "maximize" | "close" | "fullscreen") {
     if (!this.win) return;
     if (a === "minimize") await this.win.minimize();
     else if (a === "maximize") await this.win.toggleMaximize();
+    else if (a === "fullscreen") await this.win.setFullscreen(!(await this.win.isFullscreen()));
     else await this.win.close();
   }
 }
@@ -183,7 +184,7 @@ class DemoHost implements BrowserHost {
       engine: "Web demo (host browser engine via iframe)",
       servoAvailable: false,
       servoNote: "Servo runs in the desktop build (see docs/SERVO.md).",
-      version: "1.0.0", os: "web", arch: "—",
+      version: "1.1.0", os: "web", arch: "—",
     };
   }
   async windowAction() { /* noop */ }

@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.1.0 — 2026-10-26
+
+Chrome-polish & bugfix release:
+
+- **Keyboard shortcuts now work while a web page has focus** (hidden native
+  accelerator menu in Rust: Ctrl+T/W/L/F/H/J/D/R/P, zoom, Ctrl+Tab, Ctrl+1–9,
+  F11 fullscreen, F12, …) with double-fire protection
+- **Tab search** dropdown (button + `Ctrl+Shift+A`): open tabs & recently closed
+- **Site information** popup from the lock icon: connection security, blocked
+  count, engine, Copy URL / Open in system browser
+- New tabs open **right after the current tab** (like Chrome); `Alt+Enter`
+  opens the typed address in a new tab; "Switch to this tab" omnibox suggestion
+- Omnibox **zoom chip** (click to reset), downloads **unseen badge**, first-click
+  select-all in the address bar, `Esc` stops loading
+- Speed Dial on the New Tab page is now editable (add/remove shortcuts)
+- Tabs: close button on hover/active only, narrower minimum width, thin
+  scrollbars, globe fallback icon, drag the window by the empty tab strip
+- Fixes: toast was hidden behind the native page view (now shown in the chrome
+  strip); ghost placeholder while menus cover the page; New-Tab clock timer
+  leak; internal tab titles now follow language changes; choosing the Servo
+  engine explains its custom-build requirement
+
 ## v1.0.0 — 2026-10-26
 
 First release of SeeBrowser 🎉
