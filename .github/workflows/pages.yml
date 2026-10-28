@@ -3,16 +3,13 @@ name: Deploy website (GitHub Pages)
 # Publishes the website/ folder to GitHub Pages:
 #   https://manixpcshot.github.io/SeeBrowser/
 #
-# Method: classic branch publishing. The workflow pushes the site to the
-# `gh-pages` branch on every change to website/. For a public repository,
-# GitHub Pages enables itself automatically the first time a `gh-pages`
-# branch appears — no manual Settings step and no admin token needed
-# (the Actions deploy-pages method requires a pre-created Pages site,
-# which only a repo admin can create).
+# Method: classic branch publishing (pushes website/ to the `gh-pages`
+# branch). The maintainer hosts the site on their own domain, so this is
+# now MANUAL-ONLY: run it from the Actions tab if GitHub Pages hosting is
+# ever wanted (Settings → Pages → Deploy from a branch → gh-pages).
+# Every GitHub Release also carries `SeeBrowser-website.zip` for any
+# static host.
 on:
-  push:
-    branches: [main]
-    paths: ["website/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:

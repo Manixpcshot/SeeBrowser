@@ -123,14 +123,19 @@ function tabOptions() {
 
 async function ensureWebview(tab: Tab) {
   if (tab.kind !== "web" || tab.created) return;
+  // Mark as created *before* awaiting so concurrent callers (activate +
+  // navigate in the same tick) don't create the same webview twice.
+  tab.created = true;
   const isActiveTab = tab.id === activeId;
   const bounds = isActiveTab ? contentBounds() : { x: 0, y: 0, width: 1, height: 1 };
   try {
     await host.createTab(tab.id, tab.url, bounds, { ...tabOptions(), private: tab.isPrivate, zoom: tab.zoom });
-    tab.created = true;
     if (!isActiveTab) await host.setVisible(tab.id, false).catch(() => {});
     syncWebviewVisibility();
-  } catch (e) { console.error("createTab failed", e); }
+  } catch (e) {
+    tab.created = false; // allow a retry on next activation
+    console.error("createTab failed", e);
+  }
 }
 
 function internalPageOf(url: string): InternalPage {
@@ -910,7 +915,7 @@ function bindListItems(list: HTMLElement, onDelete: (url: string) => void) {
       if (del) { e.stopPropagation(); onDelete(del.dataset.del!); return; }
       const url = el.dataset.url!;
       if ((e as MouseEvent).ctrlKey || (e as MouseEvent).metaKey) openTab(url, { activate: false });
-      else openTab(url);
+      else { const a = active(); if (a) navigate(a, url); else openTab(url); }
     }));
 }
 
@@ -941,7 +946,7 @@ async function renderAbout() {
   <div class="page about">
     <svg class="about-logo"><use href="#i-eye"/></svg>
     <h1>See<span class="grad">Browser</span></h1>
-    <p class="muted">${t("version")} ${info?.version ?? "1.0.0"} · ${esc(info?.os ?? "")} ${esc(info?.arch ?? "")} · Rust + Tauri</p>
+    <p class="muted">${t("version")} ${info?.version ?? "1.0.0"} · ${esc(info?.os ?? "")} ${esc(info?.arch ?? "")} · Rust + Tauri${info?.portable ? ` · <span class="chip">${t("portableBadge")}</span>` : ""}</p>
     <p class="about-txt">${t("aboutText")}</p>
     <div class="card">
       <h2>${t("aboutEngine")}</h2>

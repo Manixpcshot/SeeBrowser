@@ -33,6 +33,7 @@ export interface EngineInfo {
   version: string;
   os: string;
   arch: string;
+  portable: boolean;
 }
 
 export interface BrowserHost {
@@ -184,7 +185,7 @@ class DemoHost implements BrowserHost {
       engine: "Web demo (host browser engine via iframe)",
       servoAvailable: false,
       servoNote: "Servo runs in the desktop build (see docs/SERVO.md).",
-      version: "1.1.0", os: "web", arch: "—",
+      version: "1.2.0", os: "web", arch: "—", portable: false,
     };
   }
   async windowAction() { /* noop */ }

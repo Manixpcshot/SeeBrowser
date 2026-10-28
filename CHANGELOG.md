@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.2.0 — 2026-10-27
+
+Portable builds + bug fixes:
+
+- **Portable builds (no installation)** — `SeeBrowser_*_x64-portable.zip`
+  (Windows) and `SeeBrowser_*_linux-portable.tar.gz`: unzip and run.
+  A `portable.txt` marker makes the app keep *all* data (settings,
+  bookmarks, history, profiles) in a `data/` folder next to the
+  executable — nothing is written to `%APPDATA%`/home. The About page
+  shows a "Portable" badge in this mode.
+- **`SeeBrowser-website.zip`** is attached to every release so the site
+  can be hosted on any static host/domain; the Pages workflow is now
+  manual-only (`workflow_dispatch`).
+- **Privacy fix:** a private tab's on-disk profile (`ephemeral/<tab>`)
+  is now wiped when the tab closes.
+- **Downloads:** percent-encoded file names are decoded, unsafe
+  characters sanitized, and existing files are no longer overwritten
+  (`file.zip` → `file (1).zip`, like Chrome).
+- **Fix:** duplicate `tab_create` calls could reload a page; creation is
+  now guarded on both the JS and Rust sides.
+- History/bookmarks list clicks navigate the current tab (like Chrome);
+  Ctrl/Cmd+click still opens a background tab.
+
 ## v1.1.0 — 2026-10-26
 
 Chrome-polish & bugfix release:

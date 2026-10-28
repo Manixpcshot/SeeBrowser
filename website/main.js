@@ -33,6 +33,7 @@
       };
       const win = find("setup.exe", ".exe");
       set("dl-win", win);
+      set("dl-win-portable", find("portable.zip"));
       const hero = document.getElementById("dl-hero");
       if (hero && win) hero.href = win.browser_download_url;
       set("dl-mac", find(".dmg"));

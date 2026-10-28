@@ -1,17 +1,18 @@
 name: Release SeeBrowser
 
-# Pushing a version tag (e.g. v1.0.0) builds installers for all platforms
-# and publishes them as a GitHub Release:
-#   Windows: SeeBrowser_*_x64-setup.exe (NSIS) + .msi
+# Pushing a version tag (e.g. v1.2.0) builds installers AND portable
+# (no-install) builds for all platforms and publishes them as a Release:
+#   Windows: SeeBrowser_*_x64-setup.exe (NSIS) + .msi + *_x64-portable.zip
 #   macOS:   .dmg
-#   Linux:   .AppImage + .deb
+#   Linux:   .AppImage + .deb + .rpm + *_linux-portable.tar.gz
+#   Plus:    SeeBrowser-website.zip (static site, host it anywhere)
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v1.0.0)"
+        description: "Tag to release (e.g. v1.2.0)"
         required: true
 
 permissions:
@@ -25,6 +26,8 @@ jobs:
       matrix:
         platform: [windows-latest, macos-latest, ubuntu-22.04]
     runs-on: ${{ matrix.platform }}
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,15 +65,73 @@ jobs:
             ## SeeBrowser — مرورگر وب اوپن‌سورس با Rust
 
             **دانلود:**
-            - 🪟 **Windows:** فایل `SeeBrowser_*_x64-setup.exe` را نصب کنید (یا `.msi`)
+            - 🪟 **Windows (نصبی):** فایل `SeeBrowser_*_x64-setup.exe` را نصب کنید (یا `.msi`)
+            - 🎒 **Windows (پرتابل، بدون نصب):** فایل `SeeBrowser_*_x64-portable.zip` را باز کنید و `SeeBrowser.exe` را اجرا کنید — همهٔ داده‌ها کنار خود برنامه در پوشهٔ `data` می‌ماند
             - 🍎 **macOS:** فایل `.dmg`
-            - 🐧 **Linux:** فایل `.AppImage` (همهٔ توزیع‌ها) یا `.deb`
+            - 🐧 **Linux:** فایل `.AppImage` (همهٔ توزیع‌ها)، `.deb`، `.rpm` یا نسخهٔ پرتابل `.tar.gz`
+            - 🌐 **وب‌سایت:** فایل `SeeBrowser-website.zip` را روی هر هاست استاتیکی آپلود کنید
 
             **Download:**
-            - 🪟 **Windows:** install `SeeBrowser_*_x64-setup.exe` (or the `.msi`)
+            - 🪟 **Windows (installer):** `SeeBrowser_*_x64-setup.exe` (or the `.msi`)
+            - 🎒 **Windows (portable, no install):** unzip `SeeBrowser_*_x64-portable.zip` and run `SeeBrowser.exe` — all data stays in a `data/` folder next to the exe
             - 🍎 **macOS:** the `.dmg`
-            - 🐧 **Linux:** the `.AppImage` (any distro) or `.deb`
+            - 🐧 **Linux:** `.AppImage`, `.deb`, `.rpm`, or the portable `.tar.gz`
+            - 🌐 **Website:** upload `SeeBrowser-website.zip` to any static host
 
             Built with Rust + Tauri. Rendering engines: Chromium/WebKit WebView (default) + Servo (libservo, experimental — see docs/SERVO.md).
           releaseDraft: false
           prerelease: false
+
+      # ---------- Portable builds (no installation) ----------
+      - name: Package Windows portable
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = "$env:TAG" -replace '^v',''
+          New-Item -ItemType Directory -Force portable | Out-Null
+          Copy-Item src-tauri/target/release/seebrowser.exe "portable/SeeBrowser.exe"
+          Copy-Item LICENSE portable/ -ErrorAction SilentlyContinue
+          @"
+          SeeBrowser portable mode
+          ========================
+          Just run SeeBrowser.exe — no installation needed.
+          Because portable.txt exists next to the exe, ALL data (settings,
+          bookmarks, history, profiles) is stored in .\data next to it.
+          Nothing is written to %APPDATA%. Delete portable.txt to go back
+          to the standard per-user storage.
+          Requirements: 64-bit Windows 10/11 with the Microsoft Edge
+          WebView2 runtime (preinstalled on current Windows; if missing:
+          https://developer.microsoft.com/microsoft-edge/webview2/).
+          "@ | Out-File portable/portable.txt -Encoding utf8
+          Compress-Archive -Path portable/* -DestinationPath "SeeBrowser_${ver}_x64-portable.zip"
+          gh release upload "$env:TAG" "SeeBrowser_${ver}_x64-portable.zip" --clobber
+
+      - name: Package Linux portable + website zip
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          mkdir -p portable
+          cp src-tauri/target/release/seebrowser portable/SeeBrowser
+          chmod +x portable/SeeBrowser
+          cp LICENSE portable/ || true
+          cat > portable/portable.txt <<'EOF'
+          SeeBrowser portable mode: because this file sits next to the
+          binary, ALL data (settings, bookmarks, history, profiles) is
+          stored in ./data instead of ~/.local/share. Delete this file
+          to use the standard per-user location. This raw binary needs
+          WebKitGTK 4.1 on the system; the .AppImage has no such need.
+          EOF
+          tar -czf "SeeBrowser_${ver}_linux-portable.tar.gz" -C portable .
+          gh release upload "$TAG" "SeeBrowser_${ver}_linux-portable.tar.gz" --clobber
+          # Static product website — ready to upload to any host/domain.
+          if command -v zip >/dev/null; then
+            (cd website && zip -qr ../SeeBrowser-website.zip .)
+          else
+            (cd website && python3 -m zipfile -c ../SeeBrowser-website.zip .)
+          fi
+          gh release upload "$TAG" SeeBrowser-website.zip --clobber
