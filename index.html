@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SeeBrowser — مرورگر وب سریع و اوپن‌سورس با Rust</title>
+<meta name="description" content="SeeBrowser یک مرورگر وب دسکتاپ اوپن‌سورس است که با زبان Rust ساخته شده؛ با موتور قابل‌تعویض Servo و Chromium، حالت تیره، جستجوی Google و Brave و شخصی‌سازی کامل." />
+<link rel="icon" type="image/png" href="assets/logo.png" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="#top"><img src="assets/logo.png" alt="SeeBrowser logo" /><span>See<b>Browser</b></span></a>
+  <nav>
+    <a href="#features" data-fa="امکانات" data-en="Features"></a>
+    <a href="#engine" data-fa="موتور نمایش" data-en="Engine"></a>
+    <a href="#customize" data-fa="شخصی‌سازی" data-en="Customize"></a>
+    <a href="#build" data-fa="بیلد از سورس" data-en="Build"></a>
+    <a href="https://github.com/Manixpcshot/SeeBrowser">GitHub</a>
+  </nav>
+  <div class="nav-actions">
+    <button id="lang-btn" class="chip-btn">EN</button>
+    <a class="btn primary" href="#download" data-fa="دانلود" data-en="Download"></a>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-txt">
+      <div class="pill" data-fa="🦀 ساخته‌شده با Rust · اوپن‌سورس (MIT) · نسخهٔ ۱.۱ منتشر شد ✨" data-en="🦀 Built with Rust · Open-source (MIT) · v1.1.0 is out ✨"></div>
+      <h1>See<span class="grad">Browser</span></h1>
+      <p class="tagline" data-fa="مرورگر وب سریع، سبک و کاملاً قابل شخصی‌سازی — با معماری موتور قابل‌تعویض: موتور اوپن‌سورس Servo و هستهٔ Chromium. همهٔ وب‌سایت‌ها و اسکریپت‌ها مثل کروم، با حالت تیره در همه‌جا."
+         data-en="A fast, lightweight and fully customizable web browser — with a pluggable engine architecture: the open-source Servo engine and the Chromium core. Every website and script, just like Chrome, with dark mode everywhere."></p>
+      <div class="hero-cta">
+        <a class="btn primary big" id="dl-hero" href="#download">⬇ <span data-fa="دانلود برای ویندوز" data-en="Download for Windows"></span></a>
+        <a class="btn ghost big" href="https://github.com/Manixpcshot/SeeBrowser" data-fa="مشاهدهٔ سورس‌کد" data-en="View source code"></a>
+      </div>
+      <div class="hero-meta">
+        <span>Windows · macOS · Linux</span><span class="dot">•</span>
+        <span data-fa="جستجو با Google و Brave" data-en="Google & Brave search"></span><span class="dot">•</span>
+        <span data-fa="بدون تبلیغ و ردیاب" data-en="Ad & tracker blocking"></span>
+      </div>
+    </div>
+
+    <!-- Browser mockup -->
+    <div class="mock" aria-hidden="true">
+      <div class="mock-tabs">
+        <span class="mock-brand"><img src="assets/logo.png" alt="" />See</span>
+        <div class="mtab active"><i class="fav g"></i><span>servo.org</span><b>×</b></div>
+        <div class="mtab"><i class="fav gh"></i><span>GitHub</span><b>×</b></div>
+        <div class="mtab"><i class="fav yt"></i><span>YouTube</span><b>×</b></div>
+        <span class="mplus">＋</span>
+        <span class="mwin">— ▢ ×</span>
+      </div>
+      <div class="mock-bar">
+        <span class="mnav">‹ › ⟳</span>
+        <div class="momni">🔒 servo.org <em>Google</em></div>
+        <span class="mnav">☆ ⛨ ⋮</span>
+      </div>
+      <div class="mock-bm"><span>⭐ Wikipedia</span><span>🦀 Rust</span><span>🦁 Brave</span><span>🐙 GitHub</span></div>
+      <div class="mock-page">
+        <img src="assets/logo.png" class="mp-logo" alt="" />
+        <div class="mp-greet" data-fa="صبح بخیر SeeBrowser" data-en="Good morning, SeeBrowser"></div>
+        <div class="mp-search">🔎 <span data-fa="جستجو در وب…" data-en="Search the web…"></span></div>
+        <div class="mp-grid">
+          <span>G</span><span>🦁</span><span>▶</span><span>🐙</span><span>W</span><span>🦀</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="section">
+    <h2 data-fa="امکانات" data-en="Features"></h2>
+    <p class="sec-sub" data-fa="همهٔ چیزهایی که از یک مرورگر مدرن انتظار دارید — در یک برنامهٔ سبکِ Rust."
+       data-en="Everything you expect from a modern browser — in one lightweight Rust app."></p>
+    <div class="grid">
+      <article class="card"><div class="ic">🗂️</div><h3 data-fa="تب‌های واقعی مثل کروم" data-en="Real Chrome-like tabs"></h3>
+        <p data-fa="تب‌های نامحدود، سنجاق‌کردن، جابه‌جایی با drag، بازگردانی تب بسته‌شده (Ctrl+Shift+T)، تب خصوصی و تب‌های عمودی کناری."
+           data-en="Unlimited tabs, pinning, drag-to-reorder, reopen closed tab (Ctrl+Shift+T), private tabs and vertical side tabs."></p></article>
+      <article class="card"><div class="ic">🌙</div><h3 data-fa="حالت تیره در همه‌جا" data-en="Dark mode everywhere"></h3>
+        <p data-fa="پوستهٔ تیره/روشن + تیره‌کردن اجباری همهٔ وب‌سایت‌ها (Force Dark) حتی سایت‌هایی که حالت تیره ندارند."
+           data-en="Dark/light UI plus forced dark mode for every website — even those without a dark theme."></p></article>
+      <article class="card"><div class="ic">🔎</div><h3>Google & Brave</h3>
+        <p data-fa="موتور جستجوی پیش‌فرض قابل انتخاب: Google، Brave Search، DuckDuckGo یا Bing — با پیشنهاد لحظه‌ای از تاریخچه و نشانک‌ها."
+           data-en="Pick your default search engine: Google, Brave Search, DuckDuckGo or Bing — with live suggestions from history & bookmarks."></p></article>
+      <article class="card"><div class="ic">🛡️</div><h3 data-fa="مسدودکنندهٔ تبلیغات و ردیاب" data-en="Ad & tracker blocker"></h3>
+        <p data-fa="مسدودسازی دامنه‌های تبلیغاتی شناخته‌شده و مخفی‌کردن عناصر تبلیغاتی صفحات، با شمارندهٔ موارد مسدودشده در هر صفحه."
+           data-en="Blocks known ad/tracker domains and hides ad elements, with a per-page blocked counter."></p></article>
+      <article class="card"><div class="ic">⭐</div><h3 data-fa="نشانک، تاریخچه، دانلود" data-en="Bookmarks, history, downloads"></h3>
+        <p data-fa="مدیریت کامل نشانک‌ها و تاریخچه با جستجو، نوار نشانک‌ها، صفحهٔ دانلودها و بازیابی نشست قبلی هنگام شروع."
+           data-en="Full bookmark & history managers with search, a bookmarks bar, a downloads page and session restore."></p></article>
+      <article class="card"><div class="ic">⌨️</div><h3 data-fa="میانبرهای کامل صفحه‌کلید" data-en="Full keyboard shortcuts"></h3>
+        <p data-fa="Ctrl+T/W/L/F/H/J/D، زوم با Ctrl+/−/0، یافتن در صفحه، چاپ و ابزار توسعه‌دهنده با F12 — دقیقاً مثل کروم."
+           data-en="Ctrl+T/W/L/F/H/J/D, zoom with Ctrl+/−/0, find-in-page, print and F12 devtools — just like Chrome."></p></article>
+      <article class="card"><div class="ic">👁️</div><h3 data-fa="رابط فارسی و انگلیسی" data-en="Persian & English UI"></h3>
+        <p data-fa="رابط کاربری دوزبانه با پشتیبانی کامل راست‌به‌چپ (RTL) — از تنظیمات قابل تغییر."
+           data-en="Bilingual interface with full RTL support — switch anytime in Settings."></p></article>
+      <article class="card"><div class="ic">🕶️</div><h3 data-fa="تب خصوصی" data-en="Private tabs"></h3>
+        <p data-fa="تب‌های خصوصی بدون ذخیرهٔ تاریخچه و با حافظهٔ جدا برای کوکی‌ها (Ctrl+Shift+P)."
+           data-en="Private tabs keep no history and use isolated cookie storage (Ctrl+Shift+P)."></p></article>
+      <article class="card"><div class="ic">⚡</div><h3 data-fa="سبک و سریع" data-en="Light & fast"></h3>
+        <p data-fa="هستهٔ Rust با چارچوب Tauri — نصاب کوچک، مصرف رم بسیار کمتر از مرورگرهای Electron و اجرای سریع."
+           data-en="A Rust core on Tauri — tiny installer, far lower RAM than Electron browsers, instant startup."></p></article>
+    </div>
+  </section>
+
+  <!-- ENGINE -->
+  <section id="engine" class="section alt">
+    <h2 data-fa="موتور نمایش صفحات" data-en="Rendering engine"></h2>
+    <p class="sec-sub" data-fa="معماری موتورِ قابل‌تعویض (Pluggable Engine) — قلب SeeBrowser."
+       data-en="A pluggable-engine architecture — the heart of SeeBrowser."></p>
+    <div class="engine-grid">
+      <article class="card engine">
+        <h3>Servo <span class="tag" data-fa="اوپن‌سورس · Rust · آزمایشی" data-en="Open-source · Rust · Experimental"></span></h3>
+        <p data-fa="Servo موتور رندرینگ اوپن‌سورسی است که با زبان Rust نوشته شده (زیر نظر Linux Foundation Europe) — امن از نظر حافظه، موازی و ماژولار. در SeeBrowser از طریق libservo در سورس‌کد گنجانده شده و با یک feature flag فعال می‌شود."
+           data-en="Servo is the open-source rendering engine written in Rust (under Linux Foundation Europe) — memory-safe, parallel and modular. SeeBrowser embeds it via libservo behind a feature flag."></p>
+        <code dir="ltr">cargo build --features servo-engine</code>
+        <p class="muted" data-fa="راهنمای کامل بیلد Servo در docs/SERVO.md ریپازیتوری."
+           data-en="Full Servo build guide in docs/SERVO.md of the repository."></p>
+      </article>
+      <article class="card engine main-e">
+        <h3>Chromium / WebKit <span class="tag" data-fa="پیش‌فرض نسخه‌های انتشار" data-en="Default in releases"></span></h3>
+        <p data-fa="برای اینکه همهٔ وب‌سایت‌ها، اسکریپت‌ها، ویدیوها و وب‌اپ‌ها دقیقاً مثل کروم کار کنند، نسخه‌های آماده از موتور سیستم استفاده می‌کنند: در ویندوز Microsoft Edge WebView2 (هستهٔ Chromium)، در مک WKWebView و در لینوکس WebKitGTK — همیشه به‌روز و امن."
+           data-en="So every website, script, video and web app works exactly like Chrome, release builds use the system engine: Microsoft Edge WebView2 (Chromium core) on Windows, WKWebView on macOS and WebKitGTK on Linux — always up to date."></p>
+        <ul>
+          <li data-fa="پشتیبانی کامل HTML5 / CSS3 / JavaScript (ES2024)" data-en="Full HTML5 / CSS3 / JavaScript (ES2024)"></li>
+          <li>WebGL / WebGPU / WebRTC</li>
+          <li data-fa="پخش ویدیو و رسانه مثل کروم" data-en="Chrome-grade media playback"></li>
+        </ul>
+      </article>
+    </div>
+    <p class="note" data-fa="چرا هر دو؟ Servo آیندهٔ موتورهای وبِ Rust است اما هنوز همهٔ سایت‌های واقعی را کامل رندر نمی‌کند. SeeBrowser هر دو را دارد: امروز با Chromium بدون محدودیت وب‌گردی کنید، و Servo را هر وقت خواستید از سورس فعال کنید."
+       data-en="Why both? Servo is the future of Rust web engines but doesn't render every real-world site perfectly yet. SeeBrowser has both: browse without limits on Chromium today, and enable Servo from source whenever you like."></p>
+  </section>
+
+  <!-- CUSTOMIZE -->
+  <section id="customize" class="section">
+    <h2 data-fa="کاملاً قابل شخصی‌سازی" data-en="Make it yours"></h2>
+    <div class="grid two">
+      <article class="card"><h3 data-fa="🎨 ظاهر" data-en="🎨 Appearance"></h3>
+        <p data-fa="پوستهٔ تیره، روشن یا هماهنگ با سیستم؛ رنگ اصلی (Accent) دلخواه؛ تراکم راحت یا فشرده؛ تب‌ها بالا یا به‌صورت عمودی در کنار صفحه."
+           data-en="Dark, light or system theme; any accent color; comfortable or compact density; tabs on top or vertical on the side."></p></article>
+      <article class="card"><h3 data-fa="🧩 رفتار" data-en="🧩 Behavior"></h3>
+        <p data-fa="صفحهٔ اصلی دلخواه، رفتار هنگام شروع (بازیابی تب‌ها/صفحهٔ اصلی)، زوم پیش‌فرض صفحات، User-Agent قابل تنظیم (کروم، فایرفاکس، سافاری، موبایل)."
+           data-en="Custom homepage, startup behavior (restore tabs / homepage), default page zoom, switchable User-Agent (Chrome, Firefox, Safari, mobile)."></p></article>
+      <article class="card"><h3 data-fa="✨ صفحهٔ تب جدید" data-en="✨ New Tab page"></h3>
+        <p data-fa="دسترسی سریع (Speed Dial) قابل ویرایش، پربازدیدترین سایت‌ها، ساعت و خوش‌آمدگویی — هماهنگ با رنگ انتخابی شما."
+           data-en="Editable speed dial, most-visited sites, clock and greeting — all matched to your accent color."></p></article>
+      <article class="card"><h3 data-fa="🧪 CSS سفارشی" data-en="🧪 Custom CSS"></h3>
+        <p data-fa="هر CSS دلخواهی را به همهٔ وب‌سایت‌ها تزریق کنید؛ اسکرول‌بار، فونت و ظاهر سایت‌ها را به سلیقهٔ خودتان درآورید (مثل userChrome.css)."
+           data-en="Inject your own CSS into every website; restyle scrollbars, fonts and sites to your taste (like userChrome.css)."></p></article>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD -->
+  <section id="download" class="section alt">
+    <h2 data-fa="دانلود SeeBrowser" data-en="Download SeeBrowser"></h2>
+    <p class="sec-sub" id="rel-info" data-fa="آخرین نسخه از GitHub Releases:" data-en="Latest version from GitHub Releases:"></p>
+    <div class="dl-grid">
+      <a class="dl card" id="dl-win" href="https://github.com/Manixpcshot/SeeBrowser/releases">
+        <div class="ic">🪟</div><h3>Windows</h3>
+        <p data-fa="فایل نصبی (Setup .exe) و MSI — ویندوز ۱۰ و ۱۱ (۶۴ بیتی)" data-en="Setup .exe and MSI installer — Windows 10 & 11 (64-bit)"></p>
+        <span class="btn primary">⬇ .exe</span></a>
+      <a class="dl card" id="dl-mac" href="https://github.com/Manixpcshot/SeeBrowser/releases">
+        <div class="ic">🍎</div><h3>macOS</h3>
+        <p data-fa="فایل .dmg برای مک‌های Intel و Apple Silicon" data-en=".dmg for Intel and Apple Silicon Macs"></p>
+        <span class="btn primary">⬇ .dmg</span></a>
+      <a class="dl card" id="dl-linux" href="https://github.com/Manixpcshot/SeeBrowser/releases">
+        <div class="ic">🐧</div><h3>Linux</h3>
+        <p data-fa="AppImage (همهٔ توزیع‌ها) و بستهٔ .deb برای اوبونتو/دبیان" data-en="AppImage (any distro) and .deb for Ubuntu/Debian"></p>
+        <span class="btn primary">⬇ .AppImage</span></a>
+    </div>
+    <p class="note" data-fa="همهٔ نسخه‌ها به‌صورت خودکار با GitHub Actions از روی سورس‌کد همین ریپازیتوری ساخته می‌شوند — شفاف و قابل بررسی."
+       data-en="Every build is produced automatically by GitHub Actions from this repository's source — transparent and reproducible."></p>
+  </section>
+
+  <!-- BUILD -->
+  <section id="build" class="section">
+    <h2 data-fa="بیلد از روی سورس‌کد" data-en="Build from source"></h2>
+    <div class="codeblock" dir="ltr">
+<pre># Prerequisites: Rust (rustup), Node.js 20+
+git clone https://github.com/Manixpcshot/SeeBrowser.git
+cd SeeBrowser
+npm install
+
+# Run in dev mode (hot reload)
+npm run tauri dev
+
+# Build installers (.exe / .dmg / .deb / .AppImage)
+npm run tauri build
+
+# Experimental: Servo engine build (see docs/SERVO.md)
+cd src-tauri &amp;&amp; cargo build --features servo-engine</pre>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <img src="assets/logo.png" alt="" />
+  <p><b>SeeBrowser</b> — <span data-fa="مرورگر اوپن‌سورس Rust با موتور Servo / Chromium" data-en="The open-source Rust browser with Servo / Chromium engines"></span></p>
+  <p class="muted">
+    <a href="https://github.com/Manixpcshot/SeeBrowser">GitHub</a> ·
+    <a href="https://github.com/Manixpcshot/SeeBrowser/releases">Releases</a> ·
+    <a href="https://servo.org">Servo</a> ·
+    <a href="https://www.rust-lang.org">Rust</a> ·
+    <a href="https://tauri.app">Tauri</a>
+  </p>
+  <p class="muted">MIT License © 2026 SeeBrowser contributors</p>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>
