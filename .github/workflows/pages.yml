@@ -2,6 +2,13 @@ name: Deploy website (GitHub Pages)
 
 # Publishes the website/ folder to GitHub Pages:
 #   https://manixpcshot.github.io/SeeBrowser/
+#
+# Method: classic branch publishing. The workflow pushes the site to the
+# `gh-pages` branch on every change to website/. For a public repository,
+# GitHub Pages enables itself automatically the first time a `gh-pages`
+# branch appears — no manual Settings step and no admin token needed
+# (the Actions deploy-pages method requires a pre-created Pages site,
+# which only a repo admin can create).
 on:
   push:
     branches: [main]
@@ -9,9 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -19,19 +24,21 @@ concurrency:
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          # Create the Pages site (build source: GitHub Actions) if it
-          # hasn't been enabled in the repo settings yet.
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: website
-      - id: deployment
-        uses: actions/deploy-pages@v4
+
+      - name: Publish website/ to the gh-pages branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cp -r website "$RUNNER_TEMP/site"
+          cd "$RUNNER_TEMP/site"
+          touch .nojekyll
+          git init -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Deploy SeeBrowser website (${{ github.sha }})"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" gh-pages
