@@ -72,10 +72,14 @@ class TauriHost implements BrowserHost {
   async init(onEvent: (e: TabEvent) => void) {
     const core = await import("@tauri-apps/api/core");
     this.invoke = core.invoke;
+    // Resolve the window object first: the title-bar buttons must work
+    // even if event subscription below were to fail.
+    try {
+      const wmod = await import("@tauri-apps/api/window");
+      this.win = wmod.getCurrentWindow();
+    } catch { /* window actions fall back to Rust commands */ }
     const event = await import("@tauri-apps/api/event");
     await event.listen<TabEvent>("see-tab-event", (ev) => onEvent(ev.payload));
-    const wmod = await import("@tauri-apps/api/window");
-    this.win = wmod.getCurrentWindow();
   }
   private inv<T>(cmd: string, args?: Record<string, unknown>) {
     return this.invoke<T>(cmd, args).catch((e) => { console.warn(cmd, e); throw e; });
@@ -101,6 +105,18 @@ class TauriHost implements BrowserHost {
   openExternal(target: string) { return this.inv<void>("open_external", { target }); }
   engineInfo() { return this.inv<EngineInfo>("engine_info"); }
   async windowAction(a: "minimize" | "maximize" | "close" | "fullscreen") {
+    // Primary path: our own Rust commands (no capability permissions
+    // involved, cannot be silently blocked). JS Window API is a fallback.
+    const cmds = {
+      minimize: "window_minimize",
+      maximize: "window_toggle_maximize",
+      close: "window_close",
+      fullscreen: "window_toggle_fullscreen",
+    } as const;
+    try {
+      await this.inv<void>(cmds[a]);
+      return;
+    } catch { /* fall through to the JS API */ }
     if (!this.win) return;
     if (a === "minimize") await this.win.minimize();
     else if (a === "maximize") await this.win.toggleMaximize();
@@ -121,11 +137,38 @@ class DemoHost implements BrowserHost {
     this.anchor = document.getElementById("webview-anchor");
   }
   private emit(e: TabEvent) { this.onEvent?.(e); }
+  /**
+   * Demo-only: some sites (Google/Brave search, YouTube) refuse to render
+   * inside an iframe (X-Frame-Options), which makes search look "broken"
+   * in the web demo. Route those through frame-friendly equivalents.
+   * The desktop app never needs this — it uses real native webviews.
+   */
+  private embedUrl(url: string): string {
+    try {
+      const u = new URL(url);
+      const h = u.hostname;
+      if ((h === "www.google.com" || h.endsWith(".google.com")) && u.pathname === "/search") {
+        return `https://html.duckduckgo.com/html/?q=${encodeURIComponent(u.searchParams.get("q") ?? "")}`;
+      }
+      if (h === "search.brave.com") {
+        return `https://html.duckduckgo.com/html/?q=${encodeURIComponent(u.searchParams.get("q") ?? "")}`;
+      }
+      if ((h === "www.youtube.com" || h === "m.youtube.com") && u.pathname === "/watch") {
+        const v = u.searchParams.get("v");
+        if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
+      }
+      if (h === "youtu.be") {
+        const v = u.pathname.slice(1);
+        if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
+      }
+    } catch { /* keep original */ }
+    return url;
+  }
   async createTab(id: string, url: string) {
     const f = document.createElement("iframe");
     f.className = "demo-frame";
     f.setAttribute("referrerpolicy", "no-referrer");
-    f.src = url;
+    f.src = this.embedUrl(url);
     f.addEventListener("load", () => {
       let title = "";
       let realUrl = url;
@@ -142,7 +185,7 @@ class DemoHost implements BrowserHost {
   }
   async navigate(id: string, url: string) {
     const f = this.frames.get(id); if (!f) return;
-    f.src = url;
+    f.src = this.embedUrl(url);
     this.emit({ label: label(id), type: "navigate", url, canGoBack: true, canGoForward: false });
     this.emit({ label: label(id), type: "loading", url });
   }
@@ -185,10 +228,16 @@ class DemoHost implements BrowserHost {
       engine: "Web demo (host browser engine via iframe)",
       servoAvailable: false,
       servoNote: "Servo runs in the desktop build (see docs/SERVO.md).",
-      version: "1.2.0", os: "web", arch: "—", portable: false,
+      version: "1.3.0", os: "web", arch: "—", portable: false,
     };
   }
-  async windowAction() { /* noop */ }
+  async windowAction(a: "minimize" | "maximize" | "close" | "fullscreen") {
+    // In a browser tab only fullscreen is meaningful.
+    if (a === "fullscreen") {
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      else await document.documentElement.requestFullscreen().catch(() => {});
+    }
+  }
 }
 
 export const host: BrowserHost = isTauri ? new TauriHost() : new DemoHost();

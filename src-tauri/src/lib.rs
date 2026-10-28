@@ -120,6 +120,10 @@ pub fn run() {
             commands::store_write,
             commands::open_external,
             commands::engine_info,
+            commands::window_minimize,
+            commands::window_toggle_maximize,
+            commands::window_close,
+            commands::window_toggle_fullscreen,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SeeBrowser");

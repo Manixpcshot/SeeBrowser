@@ -394,6 +394,36 @@ pub fn tab_close(app: AppHandle, label: String) -> Result<(), String> {
     Ok(())
 }
 
+/* ------------------------- window controls ------------------------- */
+// Implemented as Rust commands (not the JS Window API) so the custom
+// title-bar buttons always work regardless of capability/permission
+// configuration — commands are invoked from our own chrome UI only.
+
+#[tauri::command]
+pub fn window_minimize(window: Window) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn window_toggle_maximize(window: Window) -> Result<(), String> {
+    if window.is_maximized().map_err(|e| e.to_string())? {
+        window.unmaximize().map_err(|e| e.to_string())
+    } else {
+        window.maximize().map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn window_close(window: Window) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn window_toggle_fullscreen(window: Window) -> Result<(), String> {
+    let fs = window.is_fullscreen().map_err(|e| e.to_string())?;
+    window.set_fullscreen(!fs).map_err(|e| e.to_string())
+}
+
 /* ------------------------------ misc ------------------------------ */
 
 #[tauri::command]
