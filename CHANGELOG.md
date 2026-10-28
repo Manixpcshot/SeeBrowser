@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.3.0 — 2026-10-28
+
+Chrome-refresh UI + fixes:
+
+- **Window controls fixed & moved to the top-right** — minimize,
+  maximize/restore and close now run through dedicated Rust commands
+  (no JS Window-API capability chain to fail silently), and the buttons
+  are pinned to the physical top-right corner like Chrome on Windows in
+  both LTR and RTL languages. Fullscreen (⋮ menu / F11) uses the same path.
+- **New-tab (+) button right next to the tabs**, Chrome-style: the tab
+  strip now shrink-wraps to its content instead of stretching, and tabs
+  use the modern Chrome "floating pill" style with an accent underline
+  for the active tab.
+- **Search reliability** — navigation/page-open failures are no longer
+  swallowed silently; a toast is shown and the tab can be retried. In the
+  web-demo preview, Google/Brave searches (which block iframing) are
+  routed through a frame-friendly endpoint and YouTube watch pages use
+  the official embed player, so search visibly works there too.
+- Removed the drag-region attribute from the tab bar container (it could
+  swallow clicks); double-clicking the empty title-bar area now toggles
+  maximization like Chrome; the active tab is auto-scrolled into view
+  when the strip overflows.
+
 ## v1.2.0 — 2026-10-27
 
 Portable builds + bug fixes:

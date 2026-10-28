@@ -134,7 +134,10 @@ async function ensureWebview(tab: Tab) {
     syncWebviewVisibility();
   } catch (e) {
     tab.created = false; // allow a retry on next activation
+    tab.loading = false;
     console.error("createTab failed", e);
+    toast(`⚠ ${t("pageOpenError")}`);
+    renderTabs(); updateToolbar();
   }
 }
 
@@ -238,7 +241,12 @@ function navigate(tab: Tab, raw: string) {
       if (tab.id === activeId) activateTab(tab.id);
       else ensureWebview(tab);
     } else {
-      host.navigate(tab.id, url).catch(() => {});
+      host.navigate(tab.id, url).catch((e) => {
+        console.error("navigate failed", e);
+        tab.loading = false;
+        toast(`⚠ ${t("pageOpenError")}`);
+        renderTabs(); updateToolbar();
+      });
     }
     if (!tab.isPrivate) store.addHistory(url, tab.title);
   }
@@ -296,6 +304,10 @@ function renderTabs() {
     });
     tabsEl.appendChild(el);
   }
+  // Keep the active tab visible when the strip overflows (Chrome behavior).
+  requestAnimationFrame(() => {
+    tabsEl.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
 }
 
 /* ----------------------------- toolbar ----------------------------- */
@@ -1005,7 +1017,8 @@ function applySettings(rerenderInternal: boolean) {
 
 /* --------------------------- global events --------------------------- */
 $("#btn-newtab").addEventListener("click", () => openTab());
-$("#drag-region").addEventListener("dblclick", () => openTab());
+  // Chrome: double-clicking the empty title-bar area toggles maximization.
+  $("#drag-region").addEventListener("dblclick", () => host.windowAction("maximize"));
 $("#btn-back").addEventListener("click", () => { const a = active(); if (a) host.back(a.id).then(() => { a.canFwd = true; updateToolbar(); }).catch(() => {}); });
 $("#btn-fwd").addEventListener("click", () => { const a = active(); if (a) host.forward(a.id).catch(() => {}); });
 $("#btn-reload").addEventListener("click", () => {
