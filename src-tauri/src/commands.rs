@@ -87,6 +87,63 @@ fn emit(app: &AppHandle, ev: TabEvent) {
     let _ = app.emit("see-tab-event", ev);
 }
 
+/// Minimal percent-decoder for download file names (`my%20file.zip`).
+fn decode_pct(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("");
+            if let Ok(v) = u8::from_str_radix(hex, 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Make a file name safe on every OS (Windows forbids `<>:"/\|?*`).
+fn sanitize_file_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.');
+    if trimmed.is_empty() {
+        "download".to_string()
+    } else {
+        trimmed.chars().take(180).collect()
+    }
+}
+
+/// Chrome-style de-duplication: `file.zip` → `file (1).zip` → `file (2).zip`.
+fn unique_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let candidate = dir.join(name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+        _ => (name.to_string(), String::new()),
+    };
+    for n in 1..1000 {
+        let c = dir.join(format!("{stem} ({n}){ext}"));
+        if !c.exists() {
+            return c;
+        }
+    }
+    candidate
+}
+
 fn parse_url(url: &str) -> Result<tauri::Url, String> {
     let u = if url.trim().is_empty() { "about:blank" } else { url.trim() };
     tauri::Url::parse(u).map_err(|e| e.to_string())
@@ -107,10 +164,10 @@ pub fn tab_create(
     bounds: Bounds,
     options: TabOptions,
 ) -> Result<(), String> {
-    // Already created (e.g. re-activation race): just navigate it.
-    if let Some(existing) = app.get_webview(&label) {
-        let parsed = parse_url(&url)?;
-        existing.navigate(parsed).map_err(|e| e.to_string())?;
+    // Already created (duplicate call): a no-op. Navigating here could
+    // reload the page unexpectedly — explicit navigation goes through
+    // `tab_navigate` instead.
+    if app.get_webview(&label).is_some() {
         return Ok(());
     }
 
@@ -170,13 +227,13 @@ pub fn tab_create(
             match event {
                 DownloadEvent::Requested { url, destination } => {
                     if let Ok(dir) = app_dl.path().download_dir() {
-                        let name = url
+                        let raw_name = url
                             .path_segments()
                             .and_then(|mut s| s.next_back())
                             .filter(|s| !s.is_empty())
-                            .unwrap_or("download")
-                            .to_string();
-                        *destination = dir.join(name);
+                            .unwrap_or("download");
+                        let name = sanitize_file_name(&decode_pct(raw_name));
+                        *destination = unique_path(&dir, &name);
                     }
                     let mut ev = TabEvent::new(&lbl, "download-start").url(url.to_string());
                     ev.path = Some(destination.display().to_string());
@@ -201,8 +258,9 @@ pub fn tab_create(
     }
 
     // Private tabs must not share cookies/storage with normal tabs.
+    // (In portable mode this also stays inside the portable data folder.)
     if options.private {
-        if let Ok(mut dir) = app.path().app_data_dir() {
+        if let Ok(mut dir) = crate::store::data_dir(&app) {
             dir.push("ephemeral");
             dir.push(&label);
             builder = builder.data_directory(dir).incognito(true);
@@ -317,6 +375,22 @@ pub fn tab_close(app: AppHandle, label: String) -> Result<(), String> {
     if let Some(wv) = app.get_webview(&label) {
         wv.close().map_err(|e| e.to_string())?;
     }
+    // Privacy fix: a private tab's on-disk profile must not outlive the tab.
+    // The engine may hold file locks for a moment after close, so retry.
+    if let Ok(mut dir) = crate::store::data_dir(&app) {
+        dir.push("ephemeral");
+        dir.push(&label);
+        if dir.exists() {
+            std::thread::spawn(move || {
+                for _ in 0..10 {
+                    if std::fs::remove_dir_all(&dir).is_ok() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+            });
+        }
+    }
     Ok(())
 }
 
@@ -346,6 +420,8 @@ pub struct EngineInfo {
     version: String,
     os: String,
     arch: String,
+    /// True when running in portable mode (data stored next to the exe).
+    portable: bool,
 }
 
 #[tauri::command]
@@ -358,5 +434,6 @@ pub fn engine_info() -> EngineInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
+        portable: crate::store::portable_mode(),
     }
 }
